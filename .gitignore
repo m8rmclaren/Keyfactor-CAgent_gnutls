@@ -67,6 +67,7 @@ wolfssl_testing
 valgrind_output
 valgrind.log
 
-# Sig files
-signature/
-.idea/
+.idea
+cmake-build-debug-remote-host---cagent/
+cmake-build-debug/
+gnutls_wrapper/test/

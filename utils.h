@@ -31,6 +31,8 @@ int restore_file(const char* file);
 int read_file_bytes(const char* srcPath, unsigned char** pFileBytes, 
 	size_t* fileLen);
 
+int clear_file(const char* file, bool backup);
+
 int replace_file(const char* file, const char* contents, long len, bool backup);
 
 void to_lower_case( char s[], const int len );

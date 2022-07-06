@@ -2,8 +2,8 @@
  * Usage of this file and the SDK is subject to the SOFTWARE DEVELOPMENT KIT 
  * LICENSE included here as README-LICENSE.txt.  Additiona
  * lly, this C Agent
- * Reference Implementation uses the OpenSSL encryption libraries, which are 
- * not included as a part of this distribution.  
+ * Reference Implementation uses the OpenSSL encryption libraries, which are
+ * not included as a part of this distribution.
  * For hardware key storage or TPM support, libraries such as WolfSSL may also
  * be used in place of OpenSSL.
  ******************************************************************************/
@@ -70,7 +70,7 @@ char NibbleToChar( unsigned char nibbleData )
 /*	@param int byteSize = the size of the byte array                          */
 /*	@returns 0 on success, -1 on failure                                      */
 /*                                                                            */
-int byte_to_hex_string( char hexStr[], int stringSize, 
+int byte_to_hex_string( char hexStr[], int stringSize,
 	unsigned char byteData[], int byteSize )
 {
 	int i = 0, c = 0;
@@ -79,7 +79,7 @@ int byte_to_hex_string( char hexStr[], int stringSize,
 
 	if ( stringSize < (( 2 * byteSize ) + 1) ) {
 		/* String array isn't big enough */
-		goto err; 
+		goto err;
 	}
 
 	for ( ; byteSize > i; i++ )	{
@@ -263,7 +263,7 @@ static int copy_file(const char* srcPath, const char* destPath)
 	return err;
 }
 
-int read_file_bytes(const char* srcPath, unsigned char** pFileBytes, 
+int read_file_bytes(const char* srcPath, unsigned char** pFileBytes,
 	size_t* fileLen)
 {
 	int err = 0;
@@ -271,7 +271,7 @@ int read_file_bytes(const char* srcPath, unsigned char** pFileBytes,
 	FILE* fpRead = fopen(srcPath, "r");
 	if(!fpRead)	{
 		err = errno;
-	} else if (fseek(fpRead, 0, SEEK_END) != 0) {		
+	} else if (fseek(fpRead, 0, SEEK_END) != 0) {
 		err = ferror(fpRead);
 	} else {
 		*fileLen = ftell(fpRead);
@@ -329,13 +329,13 @@ int backup_file(const char* file)
 		strcat(backupPath, "~");
 		err = copy_file(file, backupPath);
 
-		if(!err) {			
+		if(!err) {
 			if(chmod(backupPath, (S_IRUSR | S_IWUSR )) < 0)	{
 				err = errno;
 			}
 		}
 	} else {
-		if ( NULL == file ) { 
+		if ( NULL == file ) {
 			dummy = strdup("NULL");
 		} else {
 			dummy = strdup(file);
@@ -363,6 +363,28 @@ int restore_file(const char* file)
 	}
 
 	return err;
+}
+
+int clear_file(const char* file, bool backup) {
+    int err = 0;
+
+    if(backup) {
+        err = backup_file(file);
+        if (err)
+            return err;
+    }
+
+    FILE* fpWrite = fopen(file, "w");
+    if(!fpWrite) {
+        err = errno;
+        char* errStr = strerror(errno);
+        log_error("%s::%s(%d) : Unable to open store at %s for writing: %s",
+                  LOG_INF, file, errStr);
+    }
+
+    fclose(fpWrite);
+
+    return err;
 }
 
 int replace_file(const char* file, const char* contents, long len, bool backup)
@@ -409,7 +431,7 @@ char* util_strip_string(const char* fromString, const char* stripString)
 	char* afterString = NULL;
 	char* returnString = NULL;
 	size_t fromLen = 0;
-	size_t stripLen = 0; 
+	size_t stripLen = 0;
 	size_t beforeLen = 0;
 	size_t afterLen = 0;
 	size_t stripPtrLen = 0;
@@ -507,7 +529,7 @@ char* bstrcat(const char* s1, const char* s2)
 		i++;
 	}
 	if (s1Len != i)	{
-		if ( NULL != result ) free(result); 
+		if ( NULL != result ) free(result);
 		result = NULL;
 	} else {
 		j = 0;
@@ -519,7 +541,7 @@ char* bstrcat(const char* s1, const char* s2)
 		if (s2Len != j) {
 			if ( NULL != result ) { free(result); }
 			result = NULL;
-		}	
+		}
 	}
 
 	if ( NULL != result ) {
@@ -578,7 +600,7 @@ char* merge_strings(const char* string1, const char* string2)
 
 /**
  * Return a substring that is everything up to the last character to find
- * 
+ *
  * NOTE: Memory is allocated by this function & must be deallocated by the
  *       calling function.
  *
@@ -591,7 +613,7 @@ char* get_prefix_substring(const char* string, const char find)
 {
 	char* subString = NULL;
 
-	log_trace("%s::%s(%d) : Find character %c in string %s", 
+	log_trace("%s::%s(%d) : Find character %c in string %s",
 		LOG_INF, find, string);
 	char* ptr = strrchr(string,find);
 
