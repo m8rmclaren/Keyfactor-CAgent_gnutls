@@ -42,16 +42,29 @@
 #define PLATORM_ENROLL_STORES "registration-enroll-stores"
 
 /******************************************************************************/
-/************************ LOCAL GLOBAL STRUCTURES/*****************************/
+/************************ LOCAL GLOBAL STRUCTURES *****************************/
 /******************************************************************************/
 
 /******************************************************************************/
-/************************** LOCAL GLOBAL VARIABLES/****************************/
+/************************** LOCAL GLOBAL VARIABLES ****************************/
 /******************************************************************************/
 
 /******************************************************************************/
-/************************ LOCAL FUNCTION DEFINITIONS/**************************/
+/************************ LOCAL FUNCTION DEFINITIONS **************************/
 /******************************************************************************/
+/**                                                                           */
+/* Add any customer specific client parameters to the session request         */
+/*                                                                            */
+/* @param  [Output] : sessionReq = The request structure to add data into     */
+/* @return : void                                                             */
+/*                                                                            */
+static void add_custom_client_parameters(struct SessionRegisterReq* sessionReq) {
+    /*
+     * To send custom ClientParameters to the platform, do something like this:
+    SessionRegisterReq_addNewClientParameter(sessionReq, "devicetype", "linux");
+    */
+    return;
+} /* add_custom_client_parameters */
 
 /**                                                                           */
 /* Modify the config.json file with the AgentId if EnrollOnStartup is true.   */
@@ -335,9 +348,107 @@ static void set_registration_parameters(struct SessionRegisterReq* sessionReq)
 
 	/* Add the agent's capabilities, so the Platform knows what to expect */
 	register_add_capabilities(sessionReq);
+    /* Add any custom parameters for this customer */
+    add_custom_client_parameters(sessionReq);
 
 	return;
 } /* set_registration_parameters */
+
+/**                                                                           */
+/* Check a certificate's expiry date                                          */
+/*                                                                            */
+/* @param  - [Input] certFile = path & filename of certificate to inspect     */
+/* @return - certificate has not expired = true                               */
+/*           otherwise = false                                                */
+/*                                                                            */
+static bool is_cert_active(char* certFile) {
+    bool bResult = false;
+
+    log_trace("%s::%s(%d) : Does cert file exist at %s?", LOG_INF, certFile);
+    if (0 == file_exists(certFile)) {
+        log_error("%s::%s(%d) : File %s does not exist", LOG_INF, certFile);
+        goto exit;
+    } else {
+        log_trace("%s::%s(%d) : Yes cert file exists -- continuing to date check", LOG_INF);
+    }
+
+    bResult = ssl_is_cert_active(certFile);
+
+    exit:
+    return bResult;
+} /* is_cert_active */
+
+/**                                                                           */
+/* Reset the agent as a new one.  The next run of the agent will then         */
+/* go through the re-provisioning process.                                    */
+/*                                                                            */
+/* @param  - none                                                             */
+/* @return - none                                                             */
+/*                                                                            */
+static void reset_agent(void) {
+    char* savedName = NULL;
+    char* savedId = NULL;
+    savedName = strdup(ConfigData->AgentName);
+    savedId = strdup(ConfigData->AgentId);
+    /* save current name */
+    /* Reset the agent id */
+    if ((ConfigData->AgentId) && (0 < strlen(ConfigData->AgentId))) {
+        free(ConfigData->AgentId);
+        ConfigData->AgentId = NULL;
+    }
+    ConfigData->AgentId = strdup("");
+
+    /* Adjust the agent name by appending a datetime */
+    /* NOTE: if a datetime is already added, be sure to remove it. */
+    char* tempName = get_prefix_substring(ConfigData->AgentName, '_');
+    if (NULL == tempName) {
+        log_debug("%s::%s(%d) : Appending datetime to %s", LOG_INF, ConfigData->AgentName);
+        tempName = strdup(ConfigData->AgentName);
+    }
+    else {
+        log_debug("%s::%s(%d) : Appending datetime to %s", LOG_INF, tempName);
+    }
+    /* get the datetime */
+    struct tm* tm = NULL;
+    time_t t;
+    char tBuf[DATE_TIME_LEN+1];
+    tm = gmtime(&t);
+    (void)strftime(tBuf, DATE_TIME_LEN+1, "%Y%m%d%H%M%S", tm);
+    log_verbose("%s::%s(%d) : Date time is %s", LOG_INF, tBuf);
+    /* Now we can adjust the Agent's Name */
+    if ((ConfigData->AgentName) && (0 < strlen(ConfigData->AgentName))) {
+        free(ConfigData->AgentName);
+        ConfigData->AgentName = NULL;
+    }
+    int correctBytes = (strlen(tempName)+DATE_TIME_LEN+2);
+    ConfigData->AgentName = calloc(correctBytes, sizeof(char));
+    if (0 >= snprintf(ConfigData->AgentName,correctBytes,"%s_%s",tempName,tBuf)) {
+        log_error("%s::%s(%d) : Fatal error rewriting agent name, not changing name or ID", LOG_INF);
+        ConfigData->AgentName = strdup(savedName);
+        ConfigData->AgentId = strdup(savedId);
+    }
+    else {
+        /* as long as we get here we successfully wrote the new agent name, so re-enroll */
+        ConfigData->EnrollOnStartup = true;
+    }
+
+    if (tempName) {
+        free(tempName);
+        tempName = NULL;
+    }
+    if (savedName) {
+        free(savedName);
+        savedName = NULL;
+    }
+    if (savedId) {
+        free(savedId);
+        savedId = NULL;
+    }
+
+    config_save();
+
+    return;
+} /* reset_agent */
 
 /**                                                                           */
 /* We need to hit the /Session/Register a second time to get the platform to  */
@@ -382,6 +493,8 @@ static int do_second_registration(struct SessionInfo* session,
 	sessionReq->AgentVersion = agentVersion;
 	/* Add the agent's capabilities, so the Platform knows what to expect */
 	register_add_capabilities(sessionReq);
+    /* Add any custom parameters for this customer */
+    add_custom_client_parameters(sessionReq);
 
 	/* Now add a parameter to let the registration handler know it */
 	/* Needs to create the re-enrollment job on the CGM Cert Store */
@@ -584,7 +697,7 @@ static bool do_first_registration_response(struct SessionRegisterResp* resp,
 /*                                                                            */
 /* @param  [Input] : resp = the platform response to parse                    */
 /* @param  [Output] : session = the session data to populate                  */
-/* @param  [Output] : schedule = string to print into
+/* @param  [Output] : schedule = string to print into                         */
 /* @param  [Output] : pJobList = the head pointer to a linked list of jobs    */
 static void do_normal_registration_response(struct SessionRegisterResp* resp, 
 	struct SessionInfo* session, struct ScheduledJob** pJobList, char* schedule)
@@ -654,6 +767,16 @@ int register_session(struct SessionInfo* session,
 		}
 		firstAgentRegistration = true;
 	}
+    else {
+        /* Check the validity of the Agent cert if we aren't in the enrollment phase */
+        if (is_cert_active(ConfigData->AgentCert)) {
+            log_trace("%s::%s:(%d) : Agent cert checks OK", LOG_INF);
+        } else {
+            log_error("%s::%s(%d) : Agent cert has expired - resetting Agent as a new device", LOG_INF);
+            reset_agent();
+            return 998;
+        }
+    }
 
 	/* Send the request up to the platform */
 	reqString = SessionRegisterReq_toJson(sessionReq);
@@ -702,9 +825,9 @@ int register_session(struct SessionInfo* session,
  				}
 			}
 			else if(resp->Result.Status == STAT_ERR	&& 
-					resp->Result.Error.CodeString && 
-					(strcasecmp("A0100007", resp->Result.Error.CodeString) || 
-					 strcasecmp("A0100008", resp->Result.Error.CodeString)) )
+					resp->Result.Error.CodeString &&
+                    ((0 == strcasecmp("A0100007", resp->Result.Error.CodeString)) ||
+                     (0 == strcasecmp("A0100008", resp->Result.Error.CodeString))) )
 			{
 				log_info("%s::%s(%d): Re-enrolling Agent "
 					"certificate, WITH session token", LOG_INF);
@@ -723,8 +846,8 @@ int register_session(struct SessionInfo* session,
 			AgentApiResult_log(resp->Result, NULL, NULL);
 			if (resp->Result.Status == STAT_ERR	&& 
 				resp->Result.Error.CodeString && 
-				(strcasecmp("A0100007", resp->Result.Error.CodeString) || 
-				 strcasecmp("A0100008", resp->Result.Error.CodeString)) )
+				((0 == strcasecmp("A0100007", resp->Result.Error.CodeString)) ||
+                 (0 == strcasecmp("A0100008", resp->Result.Error.CodeString))) )
 			{
 				log_info("%s::%s(%d): Re-enrolling Agent "
 					"certificate, no session token", LOG_INF);
